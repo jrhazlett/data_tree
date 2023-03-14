@@ -883,14 +883,14 @@ impl Node {
             .values()
             .collect::<Vec<&Node>>();
         loop {
-            let item_node = match stack.pop() {
-                Some(result) => result,
-                None => break,
-            };
-            if item_node.field_hash_map_children.is_empty() {
-                int_count_to_return += 1;
+            if let Some(item_node) = stack.pop() {
+                if item_node.field_hash_map_children.is_empty() {
+                    int_count_to_return += 1;
+                } else {
+                    stack.extend(item_node.field_hash_map_children.values())
+                }
             } else {
-                stack.extend(item_node.field_hash_map_children.values())
+                break;
             }
         }
         int_count_to_return
@@ -934,21 +934,18 @@ impl Node {
         let mut vec_path_that_exists = Vec::new();
         let mut node_to_return = self;
         for item_key in arg_path {
-            match node_to_return
+            if let Some(node) = node_to_return
                 .field_hash_map_children
                 .get(&item_key.to_string())
             {
-                Some(node_result) => {
-                    node_to_return = node_result;
-                    vec_path_that_exists.push(*item_key);
-                }
-                None => {
-                    return Err(Node::raise_error_because_path_failed(
-                        item_key,
-                        &arg_path,
-                        &vec_path_that_exists,
-                    ));
-                }
+                node_to_return = node;
+                vec_path_that_exists.push(*item_key);
+            } else {
+                return Err(Node::raise_error_because_path_failed(
+                    item_key,
+                    &arg_path,
+                    &vec_path_that_exists,
+                ));
             }
         }
         Ok(node_to_return)
@@ -989,36 +986,32 @@ impl Node {
         match arg_path.len() {
             0 => return Err("Error: arg_path is empty.".to_string()),
             1 => {
-                match self.get_node_mut_at_key(arg_path[0]) {
-                    Some(result) => return Ok(result),
-                    None => {
-                        return Err([
-                            "Error: arg_path does not exist.".to_string(),
-                            format!("arg_path = {:?}", arg_path),
-                        ]
-                        .join("\n"))
-                    }
-                };
+                if let Some(node) = self.get_node_mut_at_key(arg_path[0]) {
+                    return Ok(node);
+                } else {
+                    return Err([
+                        "Error: arg_path does not exist.".to_string(),
+                        format!("arg_path = {:?}", arg_path),
+                    ]
+                    .join("\n"));
+                }
             }
             _ => {
                 let mut vec_path_that_exists = Vec::new();
                 let mut node_to_return = self;
                 for item_key in arg_path {
-                    match node_to_return
+                    if let Some(node_result) = node_to_return
                         .field_hash_map_children
                         .get_mut(&item_key.to_string())
                     {
-                        Some(node_result) => {
-                            vec_path_that_exists.push(*item_key);
-                            node_to_return = node_result
-                        }
-                        None => {
-                            return Err(Node::raise_error_because_path_failed(
-                                item_key,
-                                arg_path,
-                                &vec_path_that_exists,
-                            ));
-                        }
+                        vec_path_that_exists.push(*item_key);
+                        node_to_return = node_result
+                    } else {
+                        return Err(Node::raise_error_because_path_failed(
+                            item_key,
+                            arg_path,
+                            &vec_path_that_exists,
+                        ));
                     }
                 }
                 Ok(node_to_return)
@@ -1079,26 +1072,26 @@ impl Node {
         let mut stack = self
             .field_hash_map_children
             .iter()
-            .map(|(item_key, item_node)| (vec![item_key.as_str()], item_node))
-            .collect::<Vec<(Vec<&str>, &Node)>>();
+            .map(|(item_key, item_node)| (vec![item_key], item_node))
+            .collect::<Vec<(Vec<&String>, &Node)>>();
         loop {
+            // If the stack empties before leaving the function, then the node wasn't found
             let (item_path, item_node) = stack.pop()?;
             if eq(item_node, arg_node) {
                 return Some(item_path.iter().map(|item| item.to_string()).collect());
             }
-            //
-            // Prep next iteration
-            //
-            for (item_key_sub, item_node_sub) in &item_node.field_hash_map_children {
-                stack.push((
-                    {
-                        let mut vec_path_sub = item_path.to_vec();
-                        vec_path_sub.push(item_key_sub.as_str());
-                        vec_path_sub
-                    },
-                    item_node_sub,
-                ))
-            }
+            stack.extend(
+                item_node
+                    .field_hash_map_children
+                    .iter()
+                    .map(|(item_key, item_node)| {
+                        (
+                            Node::get_path_with_appended_key(&item_path, item_key),
+                            item_node,
+                        )
+                    })
+                    .collect::<Vec<(Vec<&String>, &Node)>>(),
+            );
         }
     }
     //
@@ -1169,14 +1162,14 @@ impl Node {
             .values()
             .collect::<Vec<&Node>>();
         loop {
-            let item_node = match stack.pop() {
-                Some(result) => result,
-                None => break,
-            };
-            if item_node.field_hash_map_children.is_empty() {
-                vec_to_return.push(item_node)
+            if let Some(item_node) = stack.pop() {
+                if item_node.field_hash_map_children.is_empty() {
+                    vec_to_return.push(item_node)
+                } else {
+                    stack.extend(item_node.field_hash_map_children.values())
+                }
             } else {
-                stack.extend(item_node.field_hash_map_children.values())
+                break;
             }
         }
         vec_to_return
@@ -1208,12 +1201,12 @@ impl Node {
             .values()
             .collect::<Vec<&Node>>();
         loop {
-            let item_node = match stack.pop() {
-                Some(result) => result,
-                None => break,
-            };
-            vec_to_return.push(item_node);
-            stack.extend(item_node.field_hash_map_children.values())
+            if let Some(item_node) = stack.pop() {
+                vec_to_return.push(item_node);
+                stack.extend(item_node.field_hash_map_children.values())
+            } else {
+                break;
+            }
         }
         vec_to_return
     }
@@ -1232,14 +1225,14 @@ impl Node {
             .values()
             .collect::<Vec<&Node>>();
         loop {
-            let item_node = match stack.pop() {
-                Some(result) => result,
-                None => break,
-            };
-            if arg_callback(item_node) {
-                vec_to_return.push(item_node)
+            if let Some(item_node) = stack.pop() {
+                if arg_callback(item_node) {
+                    vec_to_return.push(item_node)
+                }
+                stack.extend(item_node.field_hash_map_children.values());
+            } else {
+                break;
             }
-            stack.extend(item_node.field_hash_map_children.values());
         }
         vec_to_return
     }
@@ -1276,48 +1269,42 @@ impl Node {
         let mut stack = self
             .field_hash_map_children
             .iter()
-            .map(|(item_key, item_node)| (vec![item_key.as_str()], item_node))
-            .collect::<Vec<(Vec<&str>, &Node)>>();
+            .map(|(item_key, item_node)| (vec![item_key], item_node))
+            .collect::<Vec<(Vec<&String>, &Node)>>();
         loop {
             //
             // Pop from stack
             //
-            let (item_path, item_node) = match stack.pop() {
-                Some(result) => result,
-                None => break,
-            };
-            //
-            // Do comparison and add to return value
-            //
-            if arg_callback(item_node) {
-                vec_to_return.push((item_path.to_vec(), item_node))
-            }
-            //
-            // Prep next iteration
-            //
-            for (item_key_sub, item_node_sub) in &item_node.field_hash_map_children {
-                stack.push((
-                    {
-                        let mut item_path_sub = item_path.to_vec();
-                        item_path_sub.push(item_key_sub.as_str());
-                        item_path_sub
-                    },
-                    &item_node_sub,
-                ));
+            if let Some((item_path, item_node)) = stack.pop() {
+                //
+                // Prep next iteration
+                //
+                stack.extend(
+                    item_node
+                        .field_hash_map_children
+                        .iter()
+                        .map(|(item_key, item_node)| {
+                            (
+                                Node::get_path_with_appended_key(&item_path, item_key),
+                                item_node,
+                            )
+                        })
+                        .collect::<Vec<(Vec<&String>, &Node)>>(),
+                );
+                //
+                // Do comparison and add to return value
+                //
+                if arg_callback(item_node) {
+                    vec_to_return.push((
+                        item_path.into_iter().map(|item| item.clone()).collect(),
+                        item_node,
+                    ))
+                }
+            } else {
+                break;
             }
         }
         vec_to_return
-            .iter()
-            .map(|(item_path, item_node)| {
-                (
-                    item_path
-                        .iter()
-                        .map(|item| item.to_string())
-                        .collect::<Vec<String>>(),
-                    *item_node,
-                )
-            })
-            .collect()
     }
 
     /// Returns a sorted vec of tuple-pairs consisting of paths and nodes with data matching the argument; filtered by callback
@@ -1329,7 +1316,7 @@ impl Node {
         arg_callback: impl Fn(&Node) -> bool,
     ) -> Vec<(Vec<String>, &Node)> {
         Node::get_vec_of_pairs_paths_and_generics_sorted(
-            &self.get_vec_of_pairs_paths_and_nodes_with_data_satisfying_callback(arg_callback),
+            self.get_vec_of_pairs_paths_and_nodes_with_data_satisfying_callback(arg_callback),
         )
     }
     //
@@ -1342,39 +1329,33 @@ impl Node {
         let mut stack = self
             .field_hash_map_children
             .iter()
-            .map(|(item_key, item_node)| (vec![item_key.as_str()], item_node))
-            .collect::<Vec<(Vec<&str>, &Node)>>();
+            .map(|(item_key, item_node)| (vec![item_key], item_node))
+            .collect::<Vec<(Vec<&String>, &Node)>>();
         loop {
-            let (item_path, item_node) = match stack.pop() {
-                Some(result) => result,
-                None => break,
-            };
-            vec_to_return.push(item_path.to_vec());
-            for (item_key_sub, item_node_sub) in &item_node.field_hash_map_children {
-                stack.push((
-                    {
-                        let mut item_path_sub = item_path.to_vec();
-                        item_path_sub.push(item_key_sub.as_str());
-                        item_path_sub
-                    },
-                    &item_node_sub,
-                ));
+            if let Some((item_path, item_node)) = stack.pop() {
+                for (item_key_sub, item_node_sub) in &item_node.field_hash_map_children {
+                    stack.push((
+                        Node::get_path_with_appended_key(&item_path, item_key_sub),
+                        &item_node_sub,
+                    ));
+                }
+                vec_to_return.push(
+                    item_path
+                        .into_iter()
+                        .map(|item| item.to_string())
+                        .collect::<Vec<String>>(),
+                );
+            } else {
+                break;
             }
         }
         vec_to_return
-            .iter()
-            .map(|item| {
-                item.iter()
-                    .map(|item| item.to_string())
-                    .collect::<Vec<String>>()
-            })
-            .collect()
     }
 
     /// Returns a vec of all paths within the tree, sorted
     // Test: test_get_vec_of_paths_in_tree()
     pub fn get_vec_of_paths_in_tree_sorted(&self) -> Vec<Vec<String>> {
-        Node::get_vec_of_paths_sorted(&self.get_vec_of_paths_in_tree())
+        Node::get_vec_of_paths_sorted(self.get_vec_of_paths_in_tree())
     }
 
     /// Returns a vec of all paths pointing to nodes with no children
@@ -1384,36 +1365,30 @@ impl Node {
         let mut stack = self
             .field_hash_map_children
             .iter()
-            .map(|(item_key, item_node)| (vec![item_key.as_str()], item_node))
-            .collect::<Vec<(Vec<&str>, &Node)>>();
+            .map(|(item_key, item_node)| (vec![item_key], item_node))
+            .collect::<Vec<(Vec<&String>, &Node)>>();
         loop {
-            let (item_path, item_node) = match stack.pop() {
-                Some(result) => result,
-                None => break,
-            };
-            if item_node.field_hash_map_children.is_empty() {
-                vec_to_return.push(item_path.to_vec())
-            } else {
-                for (item_key_sub, item_node_sub) in &item_node.field_hash_map_children {
-                    stack.push((
-                        {
-                            let mut item_path_sub = item_path.to_vec();
-                            item_path_sub.push(item_key_sub.as_str());
-                            item_path_sub
-                        },
-                        &item_node_sub,
-                    ));
+            if let Some((item_path, item_node)) = stack.pop() {
+                if item_node.field_hash_map_children.is_empty() {
+                    vec_to_return.push(
+                        item_path
+                            .into_iter()
+                            .map(|item| item.to_string())
+                            .collect::<Vec<String>>(),
+                    )
+                } else {
+                    for (item_key_sub, item_node_sub) in &item_node.field_hash_map_children {
+                        stack.push((
+                            Node::get_path_with_appended_key(&item_path, item_key_sub),
+                            &item_node_sub,
+                        ));
+                    }
                 }
+            } else {
+                break;
             }
         }
         vec_to_return
-            .iter()
-            .map(|item| {
-                item.iter()
-                    .map(|item| item.to_string())
-                    .collect::<Vec<String>>()
-            })
-            .collect()
     }
 
     /// Returns a vec of all paths pointing to nodes whose data satisfies the callback
@@ -1428,35 +1403,35 @@ impl Node {
         let mut stack = self
             .field_hash_map_children
             .iter()
-            .map(|(item_key, item_node)| (vec![item_key.as_str()], item_node))
-            .collect::<Vec<(Vec<&str>, &Node)>>();
+            .map(|(item_key, item_node)| (vec![item_key], item_node))
+            .collect::<Vec<(Vec<&String>, &Node)>>();
         loop {
-            let (item_path, item_node) = match stack.pop() {
-                Some(result) => result,
-                None => break,
-            };
-            if arg_callback(item_node) {
-                vec_to_return.push(item_path.to_vec())
-            }
-            for (item_key_sub, item_node_sub) in &item_node.field_hash_map_children {
-                stack.push((
-                    {
-                        let mut item_path_sub = item_path.to_vec();
-                        item_path_sub.push(item_key_sub.as_str());
-                        item_path_sub
-                    },
-                    &item_node_sub,
-                ));
+            if let Some((item_path, item_node)) = stack.pop() {
+                stack.extend(
+                    item_node
+                        .field_hash_map_children
+                        .iter()
+                        .map(|(item_key, item_node)| {
+                            (
+                                Node::get_path_with_appended_key(&item_path, item_key),
+                                item_node,
+                            )
+                        })
+                        .collect::<Vec<(Vec<&String>, &Node)>>(),
+                );
+                if arg_callback(item_node) {
+                    vec_to_return.push(
+                        item_path
+                            .into_iter()
+                            .map(|item| item.to_string())
+                            .collect::<Vec<String>>(),
+                    )
+                }
+            } else {
+                break;
             }
         }
         vec_to_return
-            .iter()
-            .map(|item| {
-                item.iter()
-                    .map(|item| item.to_string())
-                    .collect::<Vec<String>>()
-            })
-            .collect::<Vec<Vec<String>>>()
     }
 
     /// Returns a vec of paths to all nodes whose satisfies the callback
@@ -1466,11 +1441,9 @@ impl Node {
         &self,
         arg_callback: impl Fn(&Node) -> bool,
     ) -> Vec<Vec<String>> {
-        let mut vec_to_return = self.get_vec_of_paths_to_nodes_satisfying_callback(arg_callback);
-        vec_to_return.sort_by(|item_path_left, item_path_right| {
-            item_path_left.join(".").cmp(&item_path_right.join("."))
-        });
-        vec_to_return
+        Node::get_vec_of_paths_sorted(
+            self.get_vec_of_paths_to_nodes_satisfying_callback(arg_callback),
+        )
     }
     //
     // Public - insert
@@ -1510,33 +1483,27 @@ impl Node {
                         .field_hash_map_children
                         .contains_key(&item_key.to_string())
                     {
-                        node_current = match node_current
+                        if let Some(node_next) = node_current
                             .field_hash_map_children
                             .get_mut(&item_key.to_string())
                         {
-                            Some(result) => result,
-                            None => {
-                                return Err(
-                                    "Error: Failed to get node child that's definitely there."
-                                        .to_string(),
-                                )
-                            }
+                            node_current = node_next
+                        } else {
+                            return Err("Error: Failed to get node child that's definitely there."
+                                .to_string());
                         }
                     } else {
                         node_current
                             .field_hash_map_children
                             .insert(item_key.to_string(), Node::new());
-                        node_current = match node_current
+                        if let Some(node_next) = node_current
                             .field_hash_map_children
                             .get_mut(&item_key.to_string())
                         {
-                            Some(result) => result,
-                            None => {
-                                return Err(
-                                    "Error: Failed to get node child that's definitely there."
-                                        .to_string(),
-                                )
-                            }
+                            node_current = node_next;
+                        } else {
+                            return Err("Error: Failed to get node child that's definitely there."
+                                .to_string());
                         }
                     }
                 }
@@ -1578,12 +1545,13 @@ impl Node {
     pub fn has_path(&self, arg_path: &[&str]) -> bool {
         let mut node_current = self;
         for item_key in arg_path {
-            node_current = match node_current
+            if let Some(node_next) = node_current
                 .field_hash_map_children
                 .get(&item_key.to_string())
             {
-                Some(result) => result,
-                None => return false,
+                node_current = node_next
+            } else {
+                return false;
             }
         }
         true
@@ -1636,6 +1604,9 @@ impl Node {
         arg_key: &str,
         arg_collision_suffix: &str,
     ) -> Result<Node, String> {
+        //
+        // Reminder: This first lookup is here to check for possible collisions before making changes to the tree
+        //
         let node_to_pop = match self.field_hash_map_children.get(arg_key) {
             Some(result) => result,
             None => {
@@ -1675,7 +1646,7 @@ impl Node {
         //
         // If we get this far, then there are no collisions
         //
-        let mut node_popped = match self.field_hash_map_children.remove(arg_key) {
+        let mut node_popped_root = match self.field_hash_map_children.remove(arg_key) {
             Some(result) => result,
             None => {
                 return Err([
@@ -1688,28 +1659,25 @@ impl Node {
         for (item_key_to_pop, item_key_with_suffix) in
             vec_of_pairs_keys_in_node_to_pop_and_keys_with_suffixes
         {
-            self.field_hash_map_children.insert(
-                item_key_with_suffix.to_string(),
-                match node_popped
-                    .field_hash_map_children
-                    .remove(item_key_to_pop.as_str())
-                {
-                    Some(result) => result,
-                    None => {
-                        return Err([
-                            "Error: Failed to pop child from node_popped.".to_string(),
-                            format!("item_key_to_pop = {}", item_key_to_pop,),
-                            format!(
-                                "slice of valid keys = {:?}",
-                                self.field_hash_map_children.keys()
-                            ),
-                        ]
-                        .join("\n"))
-                    }
-                },
-            );
+            if let Some(item_node_popped_child) = node_popped_root
+                .field_hash_map_children
+                .remove(item_key_to_pop.as_str())
+            {
+                self.field_hash_map_children
+                    .insert(item_key_with_suffix.to_string(), item_node_popped_child);
+            } else {
+                return Err([
+                    "Error: Failed to pop child from node_popped.".to_string(),
+                    format!("item_key_to_pop = {}", item_key_to_pop,),
+                    format!(
+                        "slice of valid keys = {:?}",
+                        self.field_hash_map_children.keys()
+                    ),
+                ]
+                .join("\n"));
+            }
         }
-        Ok(node_popped)
+        Ok(node_popped_root)
     }
 
     /// Pops a child, and promotes all of its children to become parents of this node
@@ -1728,11 +1696,12 @@ impl Node {
                 self.raise_error_if_path_is_invalid(&arg_path)?;
 
                 let index_last = arg_path.len() - 1;
-                let node_parent = self.get_node_mut_at_path_or_error(&arg_path[0..index_last])?;
-                Ok(node_parent.pop_node_at_key_and_promote_its_children(
-                    arg_path[index_last],
-                    arg_collision_suffix,
-                )?)
+                Ok(self
+                    .get_node_mut_at_path_or_error(&arg_path[0..index_last])?
+                    .pop_node_at_key_and_promote_its_children(
+                        arg_path[index_last],
+                        arg_collision_suffix,
+                    )?)
             }
         }
     }
@@ -1756,13 +1725,9 @@ impl Node {
             _ => {
                 let mut node_current = self;
                 for item_key in &arg_path[0..arg_path.len() - 1] {
-                    node_current = match node_current
+                    node_current = node_current
                         .field_hash_map_children
-                        .get_mut(&item_key.to_string())
-                    {
-                        Some(result) => result,
-                        None => return None,
-                    };
+                        .get_mut(&item_key.to_string())?;
                 }
                 Some(
                     node_current
@@ -1780,50 +1745,47 @@ impl Node {
     pub fn pop_node_at_path_or_error(&mut self, arg_path: &[&str]) -> Result<Node, String> {
         match arg_path.len() {
             0 => return Err("Error: arg_path is empty.".to_string()),
-            1 => match self.pop_node_at_key(arg_path[0]) {
-                Some(result) => return Ok(result),
-                None => {
+            1 => {
+                if let Some(node) = self.pop_node_at_key(arg_path[0]) {
+                    return Ok(node);
+                } else {
                     return Err([
                         "Error: arg_path not found.".to_string(),
                         format!("arg_path = {:?}", arg_path),
                     ]
-                    .join("\n"))
+                    .join("\n"));
                 }
-            },
+            }
             _ => {
                 let mut vec_path_existing = Vec::new();
                 let mut node_current = self;
                 for item_key in &arg_path[0..arg_path.len() - 1] {
-                    node_current = match node_current
+                    if let Some(node_sub) = node_current
                         .field_hash_map_children
                         .get_mut(&item_key.to_string())
                     {
-                        Some(result) => {
-                            vec_path_existing.push(*item_key);
-                            result
-                        }
-                        None => {
-                            return Err(Node::raise_error_because_path_failed(
-                                item_key,
-                                arg_path,
-                                &vec_path_existing,
-                            ))
-                        }
-                    };
+                        vec_path_existing.push(*item_key);
+                        node_current = node_sub
+                    } else {
+                        return Err(Node::raise_error_because_path_failed(
+                            item_key,
+                            arg_path,
+                            &vec_path_existing,
+                        ));
+                    }
                 }
-                match node_current
+                if let Some(node_popped) = node_current
                     .field_hash_map_children
                     .remove(arg_path[arg_path.len() - 1])
                 {
-                    Some(result) => Ok(result),
-                    None => {
-                        return Err([
-                            "Error: Failed to remove node at path.".to_string(),
-                            format!("arg_path = {:?}", arg_path,),
-                            format!("part of path that exists = {:?}", vec_path_existing,),
-                        ]
-                        .join("\n"))
-                    }
+                    Ok(node_popped)
+                } else {
+                    Err([
+                        "Error: Failed to remove node at path.".to_string(),
+                        format!("arg_path = {:?}", arg_path,),
+                        format!("part of path that exists = {:?}", vec_path_existing,),
+                    ]
+                    .join("\n"))
                 }
             }
         }
@@ -1875,49 +1837,55 @@ impl Node {
         Ok(())
     }
     //
-    // Private - sorting
+    // Privates
     //
+    fn get_path_with_appended_key<'l>(
+        arg_path: &Vec<&'l String>,
+        arg_key: &'l String,
+    ) -> Vec<&'l String> {
+        let mut path_to_return = arg_path.to_vec();
+        path_to_return.push(arg_key);
+        path_to_return
+    }
     // Reminders:
     // - Each of these do a single pass of converting paths into strings, and then sorts them based on that
     // - When the sort finishes, the original layout is rebuilt and returned
     // - To keep the memory use low, this method *takes ownership* of the argument and does the sort on the data directly
-    // - These are private since they 'move' data, rather than copies it
+    // - These are private since they 'move' data, rather than copy it
     //
     fn get_vec_of_pairs_paths_and_generics_sorted<'l, T>(
-        arg_vec_of_pairs: &Vec<(Vec<String>, &'l T)>,
+        arg_vec_of_pairs: Vec<(Vec<String>, &'l T)>,
     ) -> Vec<(Vec<String>, &'l T)> {
-        let mut vec_to_sort = Vec::new();
-        for (item_path, item_t) in arg_vec_of_pairs {
-            vec_to_sort.push((item_path.join("\n"), item_path, item_t));
-        }
-        vec_to_sort.sort_by(
+        let mut vec_to_return = arg_vec_of_pairs
+            .into_iter()
+            .map(|(item_path, item_t)| (item_path.join("\n"), item_path, item_t))
+            .collect::<Vec<(String, Vec<String>, &T)>>();
+        vec_to_return.sort_by(
             |(item_string_left, _item_vec_left, _item_t_left),
              (item_string_right, _item_vec_right, _item_t_right)| {
                 item_string_left.cmp(item_string_right)
             },
         );
-        let mut vec_to_return = Vec::new();
-        for (_item_string, item_path, item_t) in vec_to_sort {
-            vec_to_return.push((item_path.to_vec(), *item_t))
-        }
         vec_to_return
+            .into_iter()
+            .map(|(_item_string, item_path, item_t)| (item_path, item_t))
+            .collect()
     }
 
-    fn get_vec_of_paths_sorted(arg_vec_of_paths: &Vec<Vec<String>>) -> Vec<Vec<String>> {
-        let mut vec_to_sort = Vec::new();
-        for item_path in arg_vec_of_paths {
-            vec_to_sort.push((item_path.join("."), item_path));
-        }
+    fn get_vec_of_paths_sorted(arg_vec_of_paths: Vec<Vec<String>>) -> Vec<Vec<String>> {
+        let mut vec_to_sort = arg_vec_of_paths
+            .into_iter()
+            .map(|item| (item.join("."), item))
+            .collect::<Vec<(String, Vec<String>)>>();
         vec_to_sort.sort_by(
             |(item_string_left, _item_vec_left), (item_string_right, _item_vec_right)| {
                 item_string_left.cmp(item_string_right)
             },
         );
-        let mut vec_to_return = Vec::new();
-        for (_item_string, item_path) in vec_to_sort {
-            vec_to_return.push(item_path.to_vec());
-        }
-        vec_to_return
+        vec_to_sort
+            .into_iter()
+            .map(|(_item_string, item_path)| item_path)
+            .collect()
     }
     //
     // Setup

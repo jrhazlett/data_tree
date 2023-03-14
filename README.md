@@ -196,6 +196,11 @@ of returned values. These need to be cloned to avoid borrow checker issues.
 
 ## Updates
 
+### 0.1.3
+
+- Further improved code readability and conciseness
+- Reduced the number of type conversions and 'collect' calls
+
 ### 0.1.2
 
 - Reduced some verbosity 
