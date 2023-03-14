@@ -909,10 +909,7 @@ impl Node {
     /// * arg_key: Key referring to the child node
     // Test: test_add_node_at_key()
     pub fn get_node_at_key(&self, arg_key: &str) -> Option<&Node> {
-        match self.field_hash_map_children.get(&arg_key.to_string()) {
-            Some(node_result) => Some(node_result),
-            None => None,
-        }
+        Some(self.field_hash_map_children.get(&arg_key.to_string())?)
     }
 
     /// Returns the node referenced; or None
@@ -922,13 +919,9 @@ impl Node {
     pub fn get_node_at_path(&self, arg_path: &[&str]) -> Option<&Node> {
         let mut node_to_return = self;
         for item_key in arg_path {
-            node_to_return = match node_to_return
+            node_to_return = node_to_return
                 .field_hash_map_children
-                .get(&item_key.to_string())
-            {
-                Some(node_result) => node_result,
-                None => return None,
-            }
+                .get(&item_key.to_string())?
         }
         Some(node_to_return)
     }
@@ -968,10 +961,7 @@ impl Node {
     /// * arg_key: Key referring to child node
     // Test: test_get_node_mute_at_key()
     pub fn get_node_mut_at_key(&mut self, arg_key: &str) -> Option<&mut Node> {
-        match self.field_hash_map_children.get_mut(&arg_key.to_string()) {
-            Some(node_result) => Some(node_result),
-            None => None,
-        }
+        Some(self.field_hash_map_children.get_mut(&arg_key.to_string())?)
     }
 
     /// Returns the node referenced as a mutable; or None
@@ -981,13 +971,9 @@ impl Node {
     pub fn get_node_mut_at_path(&mut self, arg_path: &[&str]) -> Option<&mut Node> {
         let mut node_to_return = self;
         for item_key in arg_path {
-            node_to_return = match node_to_return
+            node_to_return = node_to_return
                 .field_hash_map_children
-                .get_mut(&item_key.to_string())
-            {
-                Some(node_result) => node_result,
-                None => return None,
-            }
+                .get_mut(&item_key.to_string())?
         }
         Some(node_to_return)
     }
@@ -1056,10 +1042,7 @@ impl Node {
             .map(|item| (self, item))
             .collect::<Vec<(&Node, &Node)>>();
         loop {
-            let (item_node_parent, item_node) = match stack.pop() {
-                Some(result) => result,
-                None => return None,
-            };
+            let (item_node_parent, item_node) = stack.pop()?;
             if eq(item_node, arg_node) {
                 return Some(item_node_parent);
             }
@@ -1099,10 +1082,7 @@ impl Node {
             .map(|(item_key, item_node)| (vec![item_key.as_str()], item_node))
             .collect::<Vec<(Vec<&str>, &Node)>>();
         loop {
-            let (item_path, item_node) = match stack.pop() {
-                Some((path, node_current)) => (path, node_current),
-                None => return None,
-            };
+            let (item_path, item_node) = stack.pop()?;
             if eq(item_node, arg_node) {
                 return Some(item_path.iter().map(|item| item.to_string()).collect());
             }
@@ -1211,13 +1191,9 @@ impl Node {
         let mut item_node_current = self;
         for item_key in arg_path {
             // Update item_node_current for next iteration
-            item_node_current = match item_node_current
+            item_node_current = item_node_current
                 .field_hash_map_children
-                .get(&item_key.to_string())
-            {
-                Some(result) => result,
-                None => return None,
-            };
+                .get(&item_key.to_string())?;
             vec_to_return.push(item_node_current);
         }
         Some(vec_to_return)
@@ -1506,10 +1482,7 @@ impl Node {
     /// * arg_node: This is node to add at the end of the path
     // Test: test_insert_node_at_key()
     pub fn insert_node_at_key(&mut self, arg_key: &str, arg_node: Node) -> Result<(), String> {
-        match Node::raise_error_if_key_is_invalid(arg_key) {
-            Ok(()) => {}
-            Err(err) => return Err(err),
-        }
+        Node::raise_error_if_key_is_invalid(arg_key)?;
         self.field_hash_map_children
             .insert(arg_key.to_string(), arg_node);
         Ok(())
@@ -1528,10 +1501,8 @@ impl Node {
             1 => return self.insert_node_at_key(arg_path[0], arg_node),
             _ => {
                 // Block any attempt to use a path with empty elements
-                match self.raise_error_if_path_is_invalid(&arg_path) {
-                    Ok(()) => {}
-                    Err(err) => return Err(err),
-                };
+                self.raise_error_if_path_is_invalid(&arg_path)?;
+
                 let mut node_current = self;
                 for item_key in &arg_path[0..arg_path.len() - 1] {
                     // Reminder: This approach is necessary because Rust won't tolerate more than *one* mutable borrow
@@ -1649,10 +1620,7 @@ impl Node {
         {
             vec_to_return.push((
                 item_key.clone(),
-                match self.field_hash_map_children.remove(&item_key) {
-                    Some(result) => result,
-                    None => return None,
-                },
+                self.field_hash_map_children.remove(&item_key)?,
             ));
         }
         Some(vec_to_return)
@@ -1757,23 +1725,14 @@ impl Node {
                     .pop_node_at_key_and_promote_its_children(arg_path[0], arg_collision_suffix)
             }
             _ => {
-                match self.raise_error_if_path_is_invalid(&arg_path) {
-                    Ok(()) => {}
-                    Err(err) => return Err(err),
-                }
+                self.raise_error_if_path_is_invalid(&arg_path)?;
+
                 let index_last = arg_path.len() - 1;
-                let node_parent = match self.get_node_mut_at_path_or_error(&arg_path[0..index_last])
-                {
-                    Ok(result) => result,
-                    Err(err) => return Err(err),
-                };
-                match node_parent.pop_node_at_key_and_promote_its_children(
+                let node_parent = self.get_node_mut_at_path_or_error(&arg_path[0..index_last])?;
+                Ok(node_parent.pop_node_at_key_and_promote_its_children(
                     arg_path[index_last],
                     arg_collision_suffix,
-                ) {
-                    Ok(result) => return Ok(result),
-                    Err(err) => return Err(err),
-                }
+                )?)
             }
         }
     }
@@ -1783,10 +1742,7 @@ impl Node {
     /// * arg_key: A key of type &str used to identify a child node
     // Test: test_pop_node_at_key()
     pub fn pop_node_at_key(&mut self, arg_key: &str) -> Option<Node> {
-        match self.field_hash_map_children.remove(&arg_key.to_string()) {
-            Some(result) => Some(result),
-            None => None,
-        }
+        Some(self.field_hash_map_children.remove(&arg_key.to_string())?)
     }
 
     /// Returns the node stored at the path; the tree will relinquish ownership of this node
@@ -1808,13 +1764,11 @@ impl Node {
                         None => return None,
                     };
                 }
-                match node_current
-                    .field_hash_map_children
-                    .remove(&arg_path[arg_path.len() - 1].to_string())
-                {
-                    Some(result) => Some(result),
-                    None => None,
-                }
+                Some(
+                    node_current
+                        .field_hash_map_children
+                        .remove(&arg_path[arg_path.len() - 1].to_string())?,
+                )
             }
         }
     }

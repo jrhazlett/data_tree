@@ -193,3 +193,9 @@ doesn't have a lot of options to avoid redundant clones from the outside.
 - All queries are 'pass by reference' and avoid internal clones with the exception
 of returned values. These need to be cloned to avoid borrow checker issues.
 - Where possible, zero-cost options were used over unnecessary copies.
+
+## Updates
+
+### 0.1.2
+
+- Reduced some verbosity 
