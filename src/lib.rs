@@ -1688,6 +1688,7 @@ impl Node {
         arg_collision_suffix: &str,
     ) -> Result<Node, String> {
         match arg_path.len() {
+            0 => return Err( "Error: arg_path is empty.".to_string() ),
             1 => {
                 return self
                     .pop_node_at_key_and_promote_its_children(arg_path[0], arg_collision_suffix)
