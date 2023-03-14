@@ -829,16 +829,14 @@ mod test {
     //
     #[test]
     fn test_raise_error_if_path_is_invalid() {
-        let node_root = Node::new();
-
         let path_valid = ["a", "b", "c"];
-        match node_root.raise_error_if_path_is_invalid(&path_valid) {
+        match Node::raise_error_if_path_is_invalid(&path_valid) {
             Ok(()) => {}
             Err(err) => panic!("{}", err),
         };
 
         let path_invalid = ["a", "b", ""];
-        match node_root.raise_error_if_path_is_invalid(&path_invalid) {
+        match Node::raise_error_if_path_is_invalid(&path_invalid) {
             Ok(()) => {
                 panic!("raise_error_if_path_is_invalid() failed to raise error on invalid path.")
             }
@@ -917,13 +915,19 @@ impl Node {
     /// * arg_path: Path referring to node within sub-tree
     // Test: test_insert_node_at_path()
     pub fn get_node_at_path(&self, arg_path: &[&str]) -> Option<&Node> {
-        let mut node_to_return = self;
-        for item_key in arg_path {
-            node_to_return = node_to_return
-                .field_hash_map_children
-                .get(&item_key.to_string())?
+        match arg_path.len() {
+            0 => return None,
+            1 => return Some(self.field_hash_map_children.get(arg_path[0])?),
+            _ => {
+                let mut node_to_return = self;
+                for item_key in arg_path {
+                    node_to_return = node_to_return
+                        .field_hash_map_children
+                        .get(&item_key.to_string())?
+                }
+                Some(node_to_return)
+            }
         }
-        Some(node_to_return)
     }
 
     /// Returns the node referenced; or an error explaining where the path failed
@@ -931,24 +935,39 @@ impl Node {
     /// * arg_path: Path referring to node within sub-tree
     // Test: test_insert_node_at_path()
     pub fn get_node_at_path_or_error(&self, arg_path: &[&str]) -> Result<&Node, String> {
-        let mut vec_path_that_exists = Vec::new();
-        let mut node_to_return = self;
-        for item_key in arg_path {
-            if let Some(node) = node_to_return
-                .field_hash_map_children
-                .get(&item_key.to_string())
-            {
-                node_to_return = node;
-                vec_path_that_exists.push(*item_key);
-            } else {
-                return Err(Node::raise_error_because_path_failed(
-                    item_key,
-                    &arg_path,
-                    &vec_path_that_exists,
-                ));
+        match arg_path.len() {
+            0 => return Err("Error: arg_path is empty.".to_string()),
+            1 => match self.field_hash_map_children.get(arg_path[0]) {
+                Some(node) => return Ok(node),
+                None => {
+                    return Err([
+                        "Error: arg_path not in tree.".to_string(),
+                        format!("arg_path = {}", arg_path[0]),
+                    ]
+                    .join("\n"))
+                }
+            },
+            _ => {
+                let mut vec_path_that_exists = Vec::new();
+                let mut node_to_return = self;
+                for item_key in arg_path {
+                    if let Some(node) = node_to_return
+                        .field_hash_map_children
+                        .get(&item_key.to_string())
+                    {
+                        node_to_return = node;
+                        vec_path_that_exists.push(*item_key);
+                    } else {
+                        return Err(Node::raise_error_because_path_failed(
+                            item_key,
+                            &arg_path,
+                            &vec_path_that_exists,
+                        ));
+                    }
+                }
+                Ok(node_to_return)
             }
         }
-        Ok(node_to_return)
     }
     //
     // Public - get - node mut
@@ -966,13 +985,19 @@ impl Node {
     /// * arg_path: Path referring to node within sub-tree
     // Test: test_pop_node_at_path_and_promote_its_children()
     pub fn get_node_mut_at_path(&mut self, arg_path: &[&str]) -> Option<&mut Node> {
-        let mut node_to_return = self;
-        for item_key in arg_path {
-            node_to_return = node_to_return
-                .field_hash_map_children
-                .get_mut(&item_key.to_string())?
+        match arg_path.len() {
+            0 => return None,
+            1 => return self.get_node_mut_at_key(arg_path[0]),
+            _ => {
+                let mut node_to_return = self;
+                for item_key in arg_path {
+                    node_to_return = node_to_return
+                        .field_hash_map_children
+                        .get_mut(&item_key.to_string())?
+                }
+                Some(node_to_return)
+            }
         }
-        Some(node_to_return)
     }
 
     /// Returns the node referenced as a mutable; or an error message explaining where the path failed
@@ -1180,16 +1205,22 @@ impl Node {
     /// * arg_path: This is the path along which the nodes will be collected
     // Test: test_pathing()
     pub fn get_vec_of_nodes_along_path(&self, arg_path: &[&str]) -> Option<Vec<&Node>> {
-        let mut vec_to_return = Vec::new();
-        let mut item_node_current = self;
-        for item_key in arg_path {
-            // Update item_node_current for next iteration
-            item_node_current = item_node_current
-                .field_hash_map_children
-                .get(&item_key.to_string())?;
-            vec_to_return.push(item_node_current);
+        match arg_path.len() {
+            0 => return None,
+            1 => return Some(vec![self.get_node_at_key(arg_path[0])?]),
+            _ => {
+                let mut vec_to_return = Vec::new();
+                let mut item_node_current = self;
+                for item_key in arg_path {
+                    // Update item_node_current for next iteration
+                    item_node_current = item_node_current
+                        .field_hash_map_children
+                        .get(&item_key.to_string())?;
+                    vec_to_return.push(item_node_current);
+                }
+                Some(vec_to_return)
+            }
         }
-        Some(vec_to_return)
     }
 
     /// Returns a vec of all nodes within the tree; this does *not* include the root node
@@ -1471,10 +1502,11 @@ impl Node {
     // Test: test_pop_node_at_path() ...also this is a 'work horse' function in the test file
     pub fn insert_node_at_path(&mut self, arg_path: &[&str], arg_node: Node) -> Result<(), String> {
         match arg_path.len() {
+            0 => return Node::raise_error_if_path_is_invalid(&arg_path),
             1 => return self.insert_node_at_key(arg_path[0], arg_node),
             _ => {
                 // Block any attempt to use a path with empty elements
-                self.raise_error_if_path_is_invalid(&arg_path)?;
+                Node::raise_error_if_path_is_invalid(&arg_path)?;
 
                 let mut node_current = self;
                 for item_key in &arg_path[0..arg_path.len() - 1] {
@@ -1514,6 +1546,7 @@ impl Node {
         }
         Ok(())
     }
+
     //
     // Public - logic
     //
@@ -1543,23 +1576,29 @@ impl Node {
     /// * arg_path: Slice of &str keys which is use to navigate from the node of origin to the descendant node
     // Test: test_pop_node_at_path()
     pub fn has_path(&self, arg_path: &[&str]) -> bool {
-        let mut node_current = self;
-        for item_key in arg_path {
-            if let Some(node_next) = node_current
-                .field_hash_map_children
-                .get(&item_key.to_string())
-            {
-                node_current = node_next
-            } else {
-                return false;
+        match arg_path.len() {
+            0 => return false,
+            1 => self.has_key(arg_path[0]),
+            _ => {
+                let mut node_current = self;
+                for item_key in arg_path {
+                    if let Some(node_next) = node_current
+                        .field_hash_map_children
+                        .get(&item_key.to_string())
+                    {
+                        node_current = node_next
+                    } else {
+                        return false;
+                    }
+                }
+                true
             }
         }
-        true
     }
 
     /// Returns true if all path elements are valid (is *not* empty, and has no empty components)
-    // Test isn't really needed here
-    pub fn is_path_valid(&self, arg_path: &[&str]) -> bool {
+    // Test not needed
+    pub fn is_path_valid(arg_path: &[&str]) -> bool {
         if arg_path.is_empty() {
             return false;
         }
@@ -1579,7 +1618,7 @@ impl Node {
         &mut self,
     ) -> Option<Vec<(String, Node)>> {
         let mut vec_to_return = Vec::new();
-        // Reminder: The clone is needed here to avoid an (im)mutable complaint
+        // Reminder: The clone is needed here to avoid an mutability complaint
         for item_key in self
             .field_hash_map_children
             .keys()
@@ -1633,6 +1672,9 @@ impl Node {
                 vec_of_collisions_detected.push(item_key_with_suffix.clone());
             }
         }
+        //
+        // Abort if arg_collision_suffix is insufficient to avoid collisions in the parent node
+        //
         if vec_of_collisions_detected.len() > 0 {
             return Err([
                 "Error: Collisions detected with suffix.".to_string(),
@@ -1688,13 +1730,13 @@ impl Node {
         arg_collision_suffix: &str,
     ) -> Result<Node, String> {
         match arg_path.len() {
-            0 => return Err( "Error: arg_path is empty.".to_string() ),
+            0 => return Err("Error: arg_path is empty.".to_string()),
             1 => {
                 return self
                     .pop_node_at_key_and_promote_its_children(arg_path[0], arg_collision_suffix)
             }
             _ => {
-                self.raise_error_if_path_is_invalid(&arg_path)?;
+                Node::raise_error_if_path_is_invalid(&arg_path)?;
 
                 let index_last = arg_path.len() - 1;
                 Ok(self
@@ -1822,7 +1864,7 @@ impl Node {
     /// Returns an error if the path is invalid; otherwise it returns ()
     /// See is_path_valid() for criteria
     // Test: test_raise_error_if_path_is_invalid()
-    pub fn raise_error_if_path_is_invalid(&self, arg_path: &[&str]) -> Result<(), String> {
+    pub fn raise_error_if_path_is_invalid(arg_path: &[&str]) -> Result<(), String> {
         if arg_path.is_empty() {
             return Err(["Error: arg_path is empty.".to_string()].join("\n"));
         }
@@ -1840,6 +1882,7 @@ impl Node {
     //
     // Privates
     //
+    // Short-cut function for quickly replicating a vec and adding the latest key to it
     fn get_path_with_appended_key<'l>(
         arg_path: &Vec<&'l String>,
         arg_key: &'l String,
@@ -1848,15 +1891,15 @@ impl Node {
         path_to_return.push(arg_key);
         path_to_return
     }
-    // Reminders:
+    // Sort functions...
     // - Each of these do a single pass of converting paths into strings, and then sorts them based on that
     // - When the sort finishes, the original layout is rebuilt and returned
     // - To keep the memory use low, this method *takes ownership* of the argument and does the sort on the data directly
     // - These are private since they 'move' data, rather than copy it
     //
-    fn get_vec_of_pairs_paths_and_generics_sorted<'l, T>(
-        arg_vec_of_pairs: Vec<(Vec<String>, &'l T)>,
-    ) -> Vec<(Vec<String>, &'l T)> {
+    fn get_vec_of_pairs_paths_and_generics_sorted<T>(
+        arg_vec_of_pairs: Vec<(Vec<String>, &T)>,
+    ) -> Vec<(Vec<String>, &T)> {
         let mut vec_to_return = arg_vec_of_pairs
             .into_iter()
             .map(|(item_path, item_t)| (item_path.join("\n"), item_path, item_t))

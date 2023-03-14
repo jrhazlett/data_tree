@@ -194,7 +194,12 @@ doesn't have a lot of options to avoid redundant clones from the outside.
 of returned values. These need to be cloned to avoid borrow checker issues.
 - Where possible, zero-cost options were used over unnecessary copies.
 
-## Updates
+## Updates (major)
+
+### 0.1.5
+
+- Removed 'self' from functions which don't use it
+- Made pathing functions handle path lengths a bit more explicitly
 
 ### 0.1.3
 
